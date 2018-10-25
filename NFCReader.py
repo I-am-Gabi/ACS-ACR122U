@@ -160,3 +160,12 @@ response = json.loads(r.text)
 print response
 if response[0]["status"] == "SUCCESS":  
     print("[FIDO]: SUCCESS!")
+
+data_message = toHex("DOOR_GRANTED")
+print("Sending RESPONSE!")
+response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+response.append(sw1)
+response.append(sw2)
+str_hex = [str(hex(h)).replace('0x', '') for h in response]
+str_hex = ''.join(str_hex)
+print "response: " + str_hex.decode("hex")
