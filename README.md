@@ -1,29 +1,28 @@
-ACS ACR122U NFC Reader / Writer
-=========
+1. instale [pyscard](https://pyscard.sourceforge.io/user-guide.html#).
+  ```
+  $ pip install pyscard
+  ```
+  
+  Teste se a instalação aconteceu corretamente:
+  
+  ```
+  $ wget https://raw.githubusercontent.com/I-am-Gabi/ACS-ACR122U/master/test-nfc.py
+  $ python test-nfc.py
+  ```
 
-Python based reader/writer that is used to read tag data from the NFC ISO 14443 Type A and B cards, Mifare, FeliCa, and all 4 types of NFC (ISO/IEC 18092) tags.
+2. suba o [servidor fido](https://github.com/emersonmello/docker-fidouafserver)
+  ```
+  $ git clone http://github.com/emersonmello/docker-fidouafserver
+  $ cd docker-fidouafserver
+  $ docker-compose up
+  ```
 
-Code provides a basic framework used to grab tag data.
+3. Instale o [app openingdoor](https://github.com/emersonmello/openingdoor)
 
-#Environment
-Tested under OS X Mavericks using a Debian virtual machine. If you are using a virtual machine to boot Linux, Google "Virtual USB Configuration" or use this [link](http://greatxam.wordpress.com/2010/11/23/virtualbox-usb-configuration/). You will have to do this if you are using a VM, otherwise the ACR122U reader will not mount to the virtual machine.
-
-#Tech
-[pyscard] - python for smart cards
-
-
-Installation
---------------
-
-```sh
-sudo apt-get install python-pyscard
-python NFCReader.py
-
-```
-
-
-License
-----
-MIT
-
-[pyscard]:http://pyscard.sourceforge.net/# ACS-ACR122U
+4. Rode o projeto
+  ```
+  $ git clone https://github.com/I-am-Gabi/ACS-ACR122U.git
+  $ cd ACS-ACR122U
+  $ python NFCReader.py  
+  ```
+  Aproxime o celular do leitor.
