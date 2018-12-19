@@ -1,46 +1,26 @@
 from smartcard.CardType import AnyCardType
 from smartcard.CardConnection import CardConnection
 from smartcard.CardRequest import CardRequest
-from smartcard.util import toHexString
+from smartcard.util import toHexString 
 
 from settings import fido_server
+from util import bytearry2json
+
+import json
 import sys
 import requests
 import time 
+import binascii
+import logging
+logging.basicConfig(format='%(asctime)s | %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
 
-import json  
 from collections import OrderedDict
 
-def bytearry2json(content): 
-    UAFmsg = content   
-    UAFmsg = UAFmsg.replace('\x00{"uafProtocolMessage":', '').replace('"[', '[').replace(']"', ']').replace('\\"', '"').replace('\\n', '\n')
-    UAFmsg = UAFmsg[:len(UAFmsg)-1]
-    UAFmsg = UAFmsg.split('"')
-    uaf_scope = '[{"assertions": [{ "assertion":"%s", "assertionScheme":"%s"}], "fcParams":"%s", "header":{ "appID":"%s", "op":"%s", "serverData":"%s", "upv":{ "major":1, "minor":0 }}}]' % (UAFmsg[5], UAFmsg[9], UAFmsg[13], UAFmsg[19], UAFmsg[23], UAFmsg[27])
-
-    data = json.loads(uaf_scope, object_pairs_hook=OrderedDict, strict=False) 
-    json_ = json.dumps(data, separators=(',', ':')) 
-    return uaf_scope 
-
-BLOCK_SIZE = 200 
+BLOCK_SIZE = 250 
 
 cardtype = AnyCardType()
-cardrequest = CardRequest( timeout=10, cardType=cardtype )
+cardrequest = CardRequest(timeout=10, cardType=cardtype)
 cardservice = cardrequest.waitforcard()
-
-def toHex(s):
-    lst = []
-    for ch in s:
-        hv = hex(ord(ch)) 
-        if len(hv) == 1:
-            hv = '0'+hv 
-        lst.append(int(hv, 16))
-    
-    return lst 
-
-#convert hex repr to string
-def toStr(s):
-    return s and chr(int(s[:2], base=16)) + toStr(s[2:]) or ''
 
 
 # Communication parameters are mostly important for the protocol negotiation between the smart card reader and the card. 
@@ -48,44 +28,47 @@ def toStr(s):
 # The required protocol can be specified at card connection or card transmission.
 connection = cardservice.connection.connect(CardConnection.T1_protocol)
 # connection attribute, which is a CardConnection for the card
-print toHexString( cardservice.connection.getATR() )
+# logging.info(toHexString( cardservice.connection.getATR() ))
 
-print 'reader: ', cardservice.connection.getReader()
+# logging.info('reader: ', str(cardservice.connection.getReader()[0]))
 
+
+######################################## APDU
 SELECT = [0x00, 0xA4, 0x04, 0x00, 0x07, 0xF0, 0x39, 0x41, 0x48, 0x14, 0x81, 0x00, 0x00] 
 apdu = SELECT 
-print 'sending: [apdu] ' + toHexString(apdu)
+logging.info("sending: [apdu]")
 
-response, sw1, sw2 = cardservice.connection.transmit(apdu, CardConnection.T1_protocol) 
+response, sw1, sw2 = cardservice.connection.transmit(apdu, CardConnection.T1_protocol)  
 response.append(sw1)
 response.append(sw2)
 str_hex = [str(hex(h)).replace('0x', '') for h in response]
-str_hex = ''.join(str_hex)
-print "response: " + str_hex.decode("hex")
+str_hex = ' '.join(str_hex) 
+if (bytes.fromhex(str_hex).decode('utf-8')) != "HELLO":
+    logging.error("** Opss ** I'm expecting HELLO msg")
 
 ######################################## FIDO Auth Request Message
-print("Doing AuthRequest to FIDO UAF Server\n");
+logging.info("Doing AuthRequest to FIDO UAF Server\n")
 UAFurl = fido_server['AUTH_REQUEST_MSG'] % (fido_server['SCHEME'], fido_server['HOSTNAME'], fido_server['AUTH_REQUEST_ENDPOINT'])
  
 try:
     r = requests.get(UAFurl)
     r.raise_for_status()
 except requests.exceptions.RequestException as e:  # This is the correct syntax
-    print(e) 
+    logging.error(e) 
     sys.exit(1)
 
-content = r.content  
-blocks = (len(content) / BLOCK_SIZE) + 1 
+content = r.content   
+blocks = int((len(content) / BLOCK_SIZE) + 1)
 
 data_message = "BLOCK:" + str(blocks)
-print 'sending: ' + data_message
-
-response, sw1, sw2 = cardservice.connection.transmit(toHex(data_message), CardConnection.T1_protocol ) 
+logging.info('sending: ' + data_message)
+ 
+response, sw1, sw2 = cardservice.connection.transmit(list(bytearray(data_message, 'utf8')), CardConnection.T1_protocol ) 
 response.append(sw1)
 response.append(sw2)
 str_hex = [str(hex(h)).replace('0x', '') for h in response]
-str_hex = ''.join(str_hex)
-print "response: " + str_hex.decode("hex")
+str_hex = ' '.join(str_hex) 
+logging.info("response: " + bytes.fromhex(str_hex).decode('utf-8'))
 
 ######################################## SEND PACK 
 
@@ -93,70 +76,66 @@ print "response: " + str_hex.decode("hex")
 chunks = len(content)
 msg_packages = ([ content[i:i + BLOCK_SIZE] for i in range(0, chunks, BLOCK_SIZE) ])
 for pack, index in zip(msg_packages, range(1, chunks+1)):
-    print("Seding package %s..." % index)
-    data_message = toHex(pack) 
-    response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+    logging.info("Seding package %s..." % index)  
+    response, sw1, sw2 = cardservice.connection.transmit(list(bytearray(pack)), CardConnection.T1_protocol )
     response.append(sw1)
-    response.append(sw2)
+    response.append(sw2) 
     str_hex = [str(hex(h)).replace('0x', '') for h in response]
-    str_hex = ''.join(str_hex)
-    print "response: " + str_hex.decode("hex")
+    str_hex = ' '.join(str_hex) 
+    logging.info("response: " + bytes.fromhex(str_hex).decode('utf-8'))
 
-print("\nSending READY!")
+logging.info("Sending READY!")
 
-
-data_message = toHex("READY")
-response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+response, sw1, sw2 = cardservice.connection.transmit(list(bytearray("READY", 'utf8')), CardConnection.T1_protocol )
 response.append(sw1)
 response.append(sw2)
 str_hex = [str(hex(h)).replace('0x', '') for h in response]
-str_hex = ''.join(str_hex)
-print "response: " + str_hex.decode("hex")
+str_hex = ' '.join(str_hex) 
+logging.info("response: " + bytes.fromhex(str_hex).decode('utf-8'))
 
-print("\nWaiting...\n") 
+logging.info("Waiting...\n") 
 
 time.sleep(5)
 
-while 'WAIT' == str_hex.decode("hex"): 
-    data_message = toHex("READY")
-    print("SEND: " + "READY")
-    response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+while 'WAIT' == bytes.fromhex(str_hex).decode('utf-8'):  
+    logging.info("SEND: " + "READY")
+    response, sw1, sw2 = cardservice.connection.transmit(list(bytearray("READY", 'utf8')), CardConnection.T1_protocol )
     response.append(sw1)
     response.append(sw2)
     str_hex = [str(hex(h)).replace('0x', '') for h in response]
-    str_hex = ''.join(str_hex)
-    print "response: " + str_hex.decode("hex")
-
-data_message = toHex("RESPONSE")
-print("Sending RESPONSE!")
-response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+    str_hex = ' '.join(str_hex) 
+    logging.info("response: " + bytes.fromhex(str_hex).decode('utf-8')) 
+ 
+logging.info("Sending RESPONSE!")
+response, sw1, sw2 = cardservice.connection.transmit(list(bytearray("RESPONSE", 'utf8')), CardConnection.T1_protocol )
 response.append(sw1)
 response.append(sw2)
 str_hex = [str(hex(h)).replace('0x', '') for h in response]
-str_hex = ''.join(str_hex)
-print "response: " + str_hex.decode("hex")
+str_hex = ' '.join(str_hex) 
+logging.info("response: " + bytes.fromhex(str_hex).decode('utf-8'))
+logging.info("blocks: " + bytes.fromhex(str_hex).decode('utf-8').split(':')[1])
 
-blocks = int(str_hex.decode("hex").split(':')[1]) 
+blocks = int(bytes.fromhex(str_hex).decode('utf-8').split(':')[1]) 
 UAFmsg = '\0'
 for block in range(0, blocks): 
-    print("receiving block --> %s" % block)
-    data_message = toHex("NEXT") 
-    response, sw1, sw2 = cardservice.connection.transmit( data_message, CardConnection.T1_protocol )
+    logging.info("receiving block --> %s" % block) 
+    response, sw1, sw2 = cardservice.connection.transmit(list(bytearray("NEXT", 'utf8')), CardConnection.T1_protocol )
     response.append(sw1)
     response.append(sw2)
     str_hex = [str(hex(h)).replace('0x', '') for h in response]
     str_hex = ''.join(str_hex)
-    print "response: " + str_hex.decode("hex")  
-    UAFmsg += str_hex.decode("hex") 
+    # logging.info("response: " + str_hex.decode("hex"))
+    UAFmsg += bytes.fromhex(str_hex).decode('utf-8')
  
 UAFmsg = bytearry2json(UAFmsg) 
 
-print("Forwarding card response to FIDO UAF Server: \n")
+logging.info("Forwarding card response to FIDO UAF Server: \n")
 UAFurl = fido_server['AUTH_REQUEST_MSG'] % (fido_server['SCHEME'], fido_server['HOSTNAME'], fido_server['AUTH_RESPONSE_ENDPOINT'])
 headers = { 'Accept': 'application/json', 'Content-Type': 'application/json'}
 r = requests.post(UAFurl, data=UAFmsg, headers=headers)
 
 response = json.loads(r.text)
-print response
+logging.info(response)
 if response[0]["status"] == "SUCCESS":  
-    print("[FIDO]: SUCCESS!")
+    logging.info("[FIDO]: SUCCESS!")
+ 
