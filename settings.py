@@ -1,13 +1,13 @@
 fido_server = {
-    'HOSTNAME': "idp2ampto.cafeexpresso.rnp.br/sp",
-    'SCHEME': "https://",
+    'HOSTNAME': "10.0.0.105:8000",
+    'SCHEME': "http://",
 
     'REG_REQUEST_ENDPOINT': "/fidouaf/v1/public/regRequest",
     'REG_RESPONSE_ENDPOINT': "/fidouaf/v1/public/regResponse",
     'REG_REQUEST_MSG': "%s%s%s",
 
-    'AUTH_REQUEST_ENDPOINT': "/resource/fido/authRequest",
-    'AUTH_RESPONSE_ENDPOINT': "/resource/fido/authResponse",
+    'AUTH_REQUEST_ENDPOINT': "/fidouaf/v1/public/authRequest",
+    'AUTH_RESPONSE_ENDPOINT': "/fidouaf/v1/public/authResponse",
     'AUTH_REQUEST_MSG': "%s%s%s"
 }
 
